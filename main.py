@@ -29,8 +29,7 @@ def main(page: ft.Page):
     # --- UI COMPONENTS ---
     weight_input = ft.TextField(label="Weight (kg)", value="10", keyboard_type="number", expand=True)
     age_input = ft.TextField(label="Age (months)", value="12", keyboard_type="number", expand=True)
-    results_view = ft.Column()
-    drug_list_view = ft.Column(scroll="auto", height=400)
+    drug_list_view = ft.Column(scroll="auto", height=300)
 
     # Populate Drug List
     checkboxes = []
@@ -40,40 +39,52 @@ def main(page: ft.Page):
         drug_list_view.controls.append(cb)
 
     # --- LOGIC ---
-    def show_error(message):
-        page.snack_bar = ft.SnackBar(ft.Text(message, color="white"), bgcolor="red")
-        page.snack_bar.open = True
+    def close_dlg(e):
+        page.dialog.open = False
+        page.update()
+
+    def show_result_dialog(result_controls):
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Dose Calculation"),
+            content=ft.Column(result_controls, height=300, scroll="auto"),
+            actions=[ft.TextButton("Close", on_click=close_dlg)],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        page.dialog = dlg
+        dlg.open = True
         page.update()
 
     def select_all(e):
-        # Toggle based on the first box
         new_val = not checkboxes[0].value
         for cb in checkboxes:
             cb.value = new_val
         page.update()
 
     def calculate_dose(e):
-        results_view.controls.clear()
-        
-        # 1. Validate Inputs (Crash Prevention)
+        # 1. Validate Inputs
         try:
             if not weight_input.value: raise ValueError
             w = float(weight_input.value)
-            
             if not age_input.value: raise ValueError
             am = int(age_input.value)
         except ValueError:
-            show_error("Please enter a valid Weight and Age!")
+            page.snack_bar = ft.SnackBar(ft.Text("Please enter Weight and Age!", color="white"), bgcolor="red")
+            page.snack_bar.open = True
+            page.update()
             return
 
         # 2. Find Selected Drugs
         selected_drugs = [cb.label for cb in checkboxes if cb.value == True]
         
         if not selected_drugs:
-            show_error("Please select at least one drug (check the box)!")
+            page.snack_bar = ft.SnackBar(ft.Text("Please select a drug!", color="white"), bgcolor="red")
+            page.snack_bar.open = True
+            page.update()
             return
 
-        # 3. Calculate
+        # 3. Calculate & Prepare Result List
+        result_items = []
         for drug_name in selected_drugs:
             info = drug_db[drug_name]
             dose_str = "0 ml"
@@ -102,41 +113,25 @@ def main(page: ft.Page):
                     elif am > 6: dose_str, freq = "2.5 ml", "BD"
                     else: dose_str, freq = "Consult", ""
 
-            # Create Card
-            card = ft.Card(
-                content=ft.Container(
-                    content=ft.Column([
-                        ft.ListTile(
-                            leading=ft.Icon(ft.icons.MEDICATION, color="blue"),
-                            title=ft.Text(f"{drug_name}", weight="bold"),
-                            subtitle=ft.Text(f"Dose: {dose_str}  |  {freq}", size=16, color="black", weight="bold"),
-                        ),
-                        ft.Container(
-                            content=ft.Text(f"Comp: {info['comp']}", size=12, color="grey"),
-                            padding=ft.padding.only(left=16, bottom=5)
-                        ),
-                        ft.Container(
-                            content=ft.Text(f"Note: {info.get('note','')}", size=12, italic=True, color="red"),
-                            padding=ft.padding.only(left=16, bottom=10)
-                        ) if info.get("note") else ft.Container()
-                    ]),
-                    padding=5
+            # Add to list
+            result_items.append(
+                ft.ListTile(
+                    title=ft.Text(f"{drug_name}: {dose_str}", weight="bold"),
+                    subtitle=ft.Text(f"{freq}\n{info['comp']}"),
                 )
             )
-            results_view.controls.append(card)
-        
-        page.update()
+            result_items.append(ft.Divider())
+
+        # 4. Show Popup
+        show_result_dialog(result_items)
 
     # --- LAYOUT ---
     page.add(
         ft.Text("Peds Calculator", size=24, weight="bold", color="blue"),
         ft.Row([weight_input, age_input]),
         ft.ElevatedButton("Select All / Deselect All", on_click=select_all),
-        ft.Text("Select Drugs:", weight="bold"),
         ft.Container(drug_list_view, border=ft.border.all(1, "grey"), border_radius=10, padding=10),
         ft.ElevatedButton("Calculate Dose", on_click=calculate_dose, width=400, height=50, bgcolor="blue", color="white"),
-        ft.Divider(),
-        results_view,
     )
 
 ft.app(target=main)
