@@ -26,17 +26,54 @@ def main(page: ft.Page):
         "Syrup Zinc": {"type": "age", "comp": "Zinc (20mg/5ml)", "note": "2-6m: 2.5ml OD. >6m: 2.5ml BD."}
     }
 
+    # --- UI COMPONENTS ---
+    weight_input = ft.TextField(label="Weight (kg)", value="10", keyboard_type="number", expand=True)
+    age_input = ft.TextField(label="Age (months)", value="12", keyboard_type="number", expand=True)
+    results_view = ft.Column()
+    drug_list_view = ft.Column(scroll="auto", height=400)
+
+    # Populate Drug List
+    checkboxes = []
+    for d in drug_db:
+        cb = ft.Checkbox(label=d, value=False)
+        checkboxes.append(cb)
+        drug_list_view.controls.append(cb)
+
     # --- LOGIC ---
-    def calculate_dose(weight_val, age_val):
+    def show_error(message):
+        page.snack_bar = ft.SnackBar(ft.Text(message, color="white"), bgcolor="red")
+        page.snack_bar.open = True
+        page.update()
+
+    def select_all(e):
+        # Toggle based on the first box
+        new_val = not checkboxes[0].value
+        for cb in checkboxes:
+            cb.value = new_val
+        page.update()
+
+    def calculate_dose(e):
         results_view.controls.clear()
         
-        selected_drugs = [c.label for c in drug_list_view.controls if c.value == True]
-        
-        if not selected_drugs:
-            results_view.controls.append(ft.Text("Select at least one drug.", color="red"))
-            page.update()
+        # 1. Validate Inputs (Crash Prevention)
+        try:
+            if not weight_input.value: raise ValueError
+            w = float(weight_input.value)
+            
+            if not age_input.value: raise ValueError
+            am = int(age_input.value)
+        except ValueError:
+            show_error("Please enter a valid Weight and Age!")
             return
 
+        # 2. Find Selected Drugs
+        selected_drugs = [cb.label for cb in checkboxes if cb.value == True]
+        
+        if not selected_drugs:
+            show_error("Please select at least one drug (check the box)!")
+            return
+
+        # 3. Calculate
         for drug_name in selected_drugs:
             info = drug_db[drug_name]
             dose_str = "0 ml"
@@ -44,8 +81,6 @@ def main(page: ft.Page):
             
             if info.get("type") == "weight":
                 points = info["points"]
-                w = float(weight_val)
-                # Logic
                 sorted_w = sorted(points.keys())
                 if w <= sorted_w[0]: d = points[sorted_w[0]] * (w / sorted_w[0])
                 elif w >= sorted_w[-1]: d = points[sorted_w[-1]]
@@ -59,7 +94,6 @@ def main(page: ft.Page):
                 freq = info["freq"]
             
             elif info.get("type") == "age":
-                am = int(age_val)
                 if "Albendazole" in drug_name:
                     dose_str = "5 ml" if am < 24 else "10 ml"
                     freq = "Stat/HS"
@@ -74,11 +108,15 @@ def main(page: ft.Page):
                     content=ft.Column([
                         ft.ListTile(
                             leading=ft.Icon(ft.icons.MEDICATION, color="blue"),
-                            title=ft.Text(f"{drug_name} ({dose_str})", weight="bold"),
-                            subtitle=ft.Text(f"{info['comp']}\nFreq: {freq}"),
+                            title=ft.Text(f"{drug_name}", weight="bold"),
+                            subtitle=ft.Text(f"Dose: {dose_str}  |  {freq}", size=16, color="black", weight="bold"),
                         ),
                         ft.Container(
-                            content=ft.Text(f"Note: {info.get('note','')}", size=12, italic=True),
+                            content=ft.Text(f"Comp: {info['comp']}", size=12, color="grey"),
+                            padding=ft.padding.only(left=16, bottom=5)
+                        ),
+                        ft.Container(
+                            content=ft.Text(f"Note: {info.get('note','')}", size=12, italic=True, color="red"),
                             padding=ft.padding.only(left=16, bottom=10)
                         ) if info.get("note") else ft.Container()
                     ]),
@@ -89,29 +127,16 @@ def main(page: ft.Page):
         
         page.update()
 
-    # --- UI ---
-    weight_input = ft.TextField(label="Weight (kg)", value="10", keyboard_type="number", expand=True)
-    age_input = ft.TextField(label="Age (months)", value="12", keyboard_type="number", expand=True)
-    
-    drug_list_view = ft.Column(scroll="auto", height=300)
-    for d in drug_db:
-        drug_list_view.controls.append(ft.Checkbox(label=d, value=False))
-
-    results_view = ft.Column()
-
-    def on_calc_click(e):
-        calculate_dose(weight_input.value, age_input.value)
-
-    # Layout
+    # --- LAYOUT ---
     page.add(
         ft.Text("Peds Calculator", size=24, weight="bold", color="blue"),
         ft.Row([weight_input, age_input]),
+        ft.ElevatedButton("Select All / Deselect All", on_click=select_all),
         ft.Text("Select Drugs:", weight="bold"),
         ft.Container(drug_list_view, border=ft.border.all(1, "grey"), border_radius=10, padding=10),
-        ft.ElevatedButton("Calculate Dose", on_click=on_calc_click, width=400, height=50),
+        ft.ElevatedButton("Calculate Dose", on_click=calculate_dose, width=400, height=50, bgcolor="blue", color="white"),
         ft.Divider(),
         results_view,
-        ft.Text("Dr. Milan Sebastian", size=10, color="grey")
     )
 
 ft.app(target=main)
